@@ -18,6 +18,12 @@ else
   echo "Warning: AGY_AUTH_BASE64 is not set."
 fi
 
+# Ensure ~/.gemini/antigravity-cli/antigravity-oauth-token is present
+mkdir -p "$HOME/.gemini/antigravity-cli"
+if [ -f "$HOME/.gemini/keyring_token.json" ] && [ ! -f "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]; then
+  cp "$HOME/.gemini/keyring_token.json" "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+fi
+
 # Start isolated D-Bus daemon and headless Secret Service
 export ANTIGRAVITY_APP_DATA_DIR="$HOME/.gemini/antigravity-cli"
 export ANTIGRAVITY_PROJECT_ID="default-cli-project"

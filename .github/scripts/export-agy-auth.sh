@@ -112,11 +112,17 @@ for f in settings.json state.json oauth_creds.json google_accounts.json installa
   fi
 done
 
-for f in settings.json jetski_state.pbtxt installation_id; do
+for f in settings.json jetski_state.pbtxt installation_id antigravity-oauth-token; do
   if [ -f "$HOME/.gemini/antigravity-cli/$f" ]; then
     cp "$HOME/.gemini/antigravity-cli/$f" "$TEMP_DIR/.gemini/antigravity-cli/"
   fi
 done
+
+if [ -f "$TEMP_DIR/.gemini/keyring_token.json" ]; then
+  mkdir -p "$TEMP_DIR/.gemini/antigravity-cli"
+  cp "$TEMP_DIR/.gemini/keyring_token.json" "$TEMP_DIR/.gemini/antigravity-cli/antigravity-oauth-token"
+  echo "Synced antigravity-oauth-token from refreshed token."
+fi
 
 TEMP_TAR=$(mktemp)
 tar -czf "$TEMP_TAR" -C "$TEMP_DIR" .gemini

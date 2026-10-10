@@ -238,6 +238,13 @@ def refresh_token_if_needed(token_path):
 
         with open(token_path, "w", encoding="utf-8") as f:
             json.dump(data, f)
+        
+        # Also sync directly to antigravity-cli/antigravity-oauth-token
+        cli_token_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
+        os.makedirs(os.path.dirname(cli_token_path), exist_ok=True)
+        with open(cli_token_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
         print(f"Refreshed Antigravity access token successfully (expires in {expires_in}s)", flush=True)
     except Exception as e:
         print(f"Warning: Token refresh check: {e}", file=sys.stderr, flush=True)
