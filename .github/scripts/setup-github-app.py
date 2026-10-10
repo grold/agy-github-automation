@@ -104,8 +104,19 @@ class ManifestHandler(http.server.BaseHTTPRequestHandler):
                 print(f"[+] App Slug: {slug}")
                 print(f"[+] Storing secrets in repository '{REPO}'...")
 
-                subprocess.run(["gh", "secret", "set", "APP_ID", "-R", REPO, "--body", app_id], check=True)
-                subprocess.run(["gh", "secret", "set", "APP_PRIVATE_KEY", "-R", REPO, "--body", pem], check=True)
+                env = os.environ.copy()
+                if "GH_TOKEN" not in env:
+                    try:
+                        token_res = subprocess.run(
+                            ["secret-tool", "lookup", "service", "gh:github.com", "username", "grold"],
+                            capture_output=True, text=True, check=True
+                        )
+                        env["GH_TOKEN"] = token_res.stdout.strip()
+                    except Exception:
+                        pass
+
+                subprocess.run(["gh", "secret", "set", "APP_ID", "-R", REPO, "--body", app_id], env=env, check=True)
+                subprocess.run(["gh", "secret", "set", "APP_PRIVATE_KEY", "-R", REPO, "--body", pem], env=env, check=True)
 
                 print("[+] Successfully saved APP_ID and APP_PRIVATE_KEY to repository secrets!")
                 print(f"\n>>> NEXT STEP: Install the App on '{REPO}' by visiting:")
