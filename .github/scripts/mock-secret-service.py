@@ -54,6 +54,7 @@ class SecretService(dbus.service.Object):
     def OpenSession(self, algorithm, input_val):
         self.session_count += 1
         spath = f"/org/freedesktop/secrets/session/{self.session_count}"
+        print(f"MOCK SERVICE: OpenSession called: algo={algorithm}", flush=True)
         if algorithm == "plain":
             sessions[spath] = None
             return (dbus.ByteArray(b""), dbus.ObjectPath(spath))
@@ -68,14 +69,17 @@ class SecretService(dbus.service.Object):
 
     @dbus.service.method("org.freedesktop.Secret.Service", in_signature="s", out_signature="o")
     def ReadAlias(self, name):
+        print(f"MOCK SERVICE: ReadAlias called: {name}", flush=True)
         return dbus.ObjectPath(self.collection_path)
 
     @dbus.service.method("org.freedesktop.Secret.Service", in_signature="a{ss}", out_signature="aoao")
     def SearchItems(self, attributes):
+        print(f"MOCK SERVICE: SearchItems called: attrs={attributes}", flush=True)
         return ([dbus.ObjectPath(self.item_path)], [])
 
     @dbus.service.method("org.freedesktop.Secret.Service", in_signature="aoo", out_signature="a{o(oayays)}")
     def GetSecrets(self, items, session):
+        print(f"MOCK SERVICE: GetSecrets called: items={items}", flush=True)
         res = {}
         dh_sess = sessions.get(str(session))
         if dh_sess is not None:

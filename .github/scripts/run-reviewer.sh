@@ -19,13 +19,21 @@ else
 fi
 
 # Start isolated D-Bus daemon and headless Secret Service
+export ANTIGRAVITY_APP_DATA_DIR="$HOME/.gemini/antigravity-cli"
+export ANTIGRAVITY_PROJECT_ID="default-cli-project"
+
 if [ -f "$HOME/.gemini/keyring_token.json" ]; then
   echo "Starting headless Secret Service for Antigravity..."
   export DBUS_SESSION_BUS_ADDRESS=$(dbus-daemon --session --print-address --fork)
+  echo "DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"
   python3 /workspace/.github/scripts/mock-secret-service.py "$HOME/.gemini/keyring_token.json" &
   MOCK_SECRET_PID=$!
   sleep 1
   trap "kill $MOCK_SECRET_PID 2>/dev/null || true" EXIT
+
+  echo "Verifying Secret Service lookup via secret-tool..."
+  secret-tool lookup service gemini username antigravity | head -c 30 || echo "secret-tool lookup failed"
+  echo ""
 fi
 
 echo "=== Step 2: Fetching PR Metadata and Diff ==="
