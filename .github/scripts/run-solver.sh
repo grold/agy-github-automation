@@ -47,8 +47,8 @@ fi
 BRANCH_NAME="agent/issue-${ISSUE_NUMBER}"
 
 echo "=== Step 2: Preparing Branch '${BRANCH_NAME}' ==="
-git config --global user.name "antigravity-bot[bot]"
-git config --global user.email "antigravity-bot[bot]@users.noreply.github.com"
+git config --global user.name "${BOT_NAME:-antigravity-bot[bot]}"
+git config --global user.email "${BOT_EMAIL:-antigravity-bot[bot]@users.noreply.github.com}"
 if [ -n "${GH_TOKEN:-}" ]; then
   git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 fi
