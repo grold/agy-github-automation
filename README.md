@@ -1,6 +1,6 @@
 # Antigravity GitHub Automation Template
 
-Autonomous issue-solving and PR-reviewing workflows powered by **Antigravity CLI (`agy`)** inside isolated Docker containers on GitHub Actions.
+Autonomous issue-solving and PR-reviewing workflows powered by **Antigravity CLI (`agy`)** inside isolated Docker containers on GitHub Actions, fully attributed to a dedicated bot (**`[bot]`**).
 
 ---
 
@@ -10,27 +10,40 @@ Autonomous issue-solving and PR-reviewing workflows powered by **Antigravity CLI
  [ GitHub Issue Opened / Labeled ]
               │ (Verified collaborator or 'agent:solve' label)
               ▼
-   ┌──────────────────────────────────────────────────┐
-   │ GitHub Actions: agy-issue-solver.yml             │
-   │                                                  │
-   │  1. Restores ~/.gemini credentials from secret   │
-   │  2. Spawns isolated Docker runner container      │
-   │  3. agy analyzes codebase, writes fix & tests    │
-   │  4. Commits changes to agent/issue-<number>      │
-   │  5. Opens Pull Request via GitHub App / PAT      │
-   └──────────────────────────────────────────────────┘
+   ┌─────────────────────────────────────────────────────────┐
+   │ GitHub Actions: agy-issue-solver.yml                    │
+   │                                                         │
+   │  1. Generates GitHub App Token (e.g., your-bot[bot])    │
+   │  2. Restores ~/.gemini credentials from secret          │
+   │  3. Spawns isolated Docker runner container             │
+   │  4. Runs headless Secret Service for agy authentication │
+   │  5. agy analyzes codebase, writes fix & unit tests      │
+   │  6. Commits changes under bot identity: your-bot[bot]   │
+   │  7. Opens Pull Request via GitHub App                   │
+   └─────────────────────────────────────────────────────────┘
               │
               ▼ (PR Opened event triggers next workflow)
-   ┌──────────────────────────────────────────────────┐
-   │ GitHub Actions: agy-pr-reviewer.yml              │
-   │                                                  │
-   │  1. Spawns isolated Docker runner container      │
-   │  2. Fetches diff and PR metadata                 │
-   │  3. agy reviews code against reviewer guidelines │
-   │  4. Submits line-by-line review comments and     │
-   │     formal GitHub Review assessment              │
-   └──────────────────────────────────────────────────┘
+   ┌─────────────────────────────────────────────────────────┐
+   │ GitHub Actions: agy-pr-reviewer.yml                     │
+   │                                                         │
+   │  1. Generates GitHub App Token                          │
+   │  2. Spawns isolated Docker runner container             │
+   │  3. Fetches diff and PR metadata                        │
+   │  4. agy reviews code against reviewer guidelines        │
+   │  5. Submits line-by-line comments & formal review       │
+   │     assessment posted by your-bot[bot]                  │
+   └─────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## ✨ Features
+
+- **Autonomous End-to-End Resolution**: Automatically resolves issues, writes tests, creates PRs, and submits reviews.
+- **Dedicated Bot Attribution**: Commits, PRs, and review comments are posted under a dedicated bot identity (e.g. `grold-agy-bot [bot]`), keeping your personal profile clean.
+- **Chained Workflow Execution**: Uses GitHub App authentication so that opening a PR seamlessly triggers the downstream PR Reviewer workflow (which standard `GITHUB_TOKEN` suppresses).
+- **Headless Secret Service Integration**: Runs a lightweight mock D-Bus Secret Service inside Docker so `agy` seamlessly unlocks stored subscription credentials.
+- **Quota & Security Guardrails**: Restricted to repository owners, members, and collaborators. External issues are ignored unless explicitly labeled `agent:solve`.
 
 ---
 
@@ -39,12 +52,14 @@ Autonomous issue-solving and PR-reviewing workflows powered by **Antigravity CLI
 ```
 .github/
 ├── agents/
-│   ├── solver.md             # Custom guidelines & prompt for Issue Solver Agent
-│   └── reviewer.md           # Custom guidelines, checklist & JSON schema for PR Reviewer
+│   ├── solver.md             # Custom prompt & guidelines for Issue Solver Agent
+│   └── reviewer.md           # Custom checklist & structured schema for PR Reviewer Agent
 ├── docker/
-│   └── Dockerfile            # Isolated Ubuntu runner with mise, agy, gh CLI, git, jq
+│   └── Dockerfile            # Isolated Ubuntu runner with mise, agy, gh CLI, git, jq, dbus
 ├── scripts/
-│   ├── export-agy-auth.sh    # Helper script to export your local ~/.gemini credentials
+│   ├── export-agy-auth.sh    # Exports your local ~/.gemini credentials to base64
+│   ├── setup-github-app.py   # Automated 1-click GitHub App registration & secret configuration
+│   ├── mock-secret-service.py# Headless D-Bus Secret Service for containerized agy
 │   ├── run-solver.sh         # Headless solver execution script
 │   └── run-reviewer.sh       # Headless reviewer execution script with JSON parser
 └── workflows/
@@ -63,7 +78,7 @@ cp -r .github /path/to/your-repo/
 ```
 
 ### 2. Export Your Antigravity Credentials
-Run the export helper from your local machine (where `agy` is already logged in with your subscription):
+Run the export helper from your workstation where `agy` is already logged in with your subscription:
 ```bash
 bash .github/scripts/export-agy-auth.sh
 ```
@@ -77,20 +92,43 @@ Add it as a repository secret:
 
 *(Or run `gh secret set AGY_AUTH_BASE64 --body "<base64_string>"` using GitHub CLI)*
 
-### 3. Configure GitHub Token (`BOT_GITHUB_TOKEN`)
-> [!IMPORTANT]
-> GitHub Actions automatically suppresses subsequent workflow triggers when events are generated by the default `GITHUB_TOKEN`.
-> To ensure that the PR created by the Issue Solver automatically triggers the PR Reviewer workflow, you must provide a **GitHub App Token** or a **Personal Access Token (PAT)**.
+### 3. Register GitHub App for Bot Identity (Recommended)
+Using a GitHub App allows all solver and reviewer actions to be attributed to a dedicated bot (e.g. `your-repo-bot [bot]`) and enables chained workflow triggers.
 
-1. Create a Personal Access Token (classic or fine-grained) with `repo` permissions (or install a GitHub App).
-2. Save it as a repository secret named **`BOT_GITHUB_TOKEN`**.
-*(If omitted, the workflow falls back to `GITHUB_TOKEN`, but the PR Review workflow will require manual dispatch).*
+Run the automated setup helper:
+```bash
+python3 .github/scripts/setup-github-app.py <owner>/<repo> [bot-name]
+```
+1. Open the local link prompted in your browser (`http://localhost:3000`).
+2. Click **Create GitHub App**.
+3. Install the app on your repository.
+4. The script automatically stores `APP_ID` and `APP_PRIVATE_KEY` directly in your repository secrets!
+
+*(Alternative: You can provide a Personal Access Token stored as `BOT_GITHUB_TOKEN`, but actions will appear under that user account rather than a `[bot]` identity).*
 
 ### 4. Enable Workflow Permissions
 In your GitHub repository:
 - Go to **Settings** → **Actions** → **General**.
 - Under **Workflow permissions**, select **Read and write permissions**.
 - Check **Allow GitHub Actions to create and approve pull requests**.
+
+---
+
+## 💡 How It Works
+
+### Opening an Issue
+When an issue is opened by a repository maintainer (or when a maintainer applies the label `agent:solve` to an external issue):
+1. `agy-issue-solver.yml` triggers.
+2. The agent reads the issue title and description, analyzes project structure, and creates a fix branch `agent/issue-<number>`.
+3. The agent implements the changes and adds unit tests.
+4. Commits are signed with `your-bot[bot]`.
+5. A pull request is submitted referencing the issue.
+
+### Pull Request Review
+When the pull request is opened or updated:
+1. `agy-pr-reviewer.yml` triggers automatically.
+2. The agent fetches the git diff, checks the changes against [`.github/agents/reviewer.md`](.github/agents/reviewer.md), and validates code quality and test coverage.
+3. The bot posts line-by-line feedback and a formal review assessment.
 
 ---
 
@@ -101,10 +139,12 @@ In your GitHub repository:
 - Edit [`.github/agents/reviewer.md`](.github/agents/reviewer.md) to customize review criteria, required checks, and feedback tone.
 
 ### Adding Project Tooling to the Container
-Edit [`.github/docker/Dockerfile`](.github/docker/Dockerfile) to add any compilers, language runtimes, or test runners your project requires (e.g., Python, Rust, Go, Node, etc.).
+Edit [`.github/docker/Dockerfile`](.github/docker/Dockerfile) to add any compilers, language runtimes, linters, or test runners your project requires (e.g., Python, Rust, Go, Node, etc.).
 
 ---
 
 ## 🔒 Security & Guardrails
-- **Collaborator Filtering:** The solver workflow will only execute for issues created or labeled by repository collaborators, members, or owners (`OWNER`, `MEMBER`, `COLLABORATOR`). External or untrusted user issues will not consume your Antigravity quota unless explicitly labeled with `agent:solve` by a maintainer.
+
+- **Collaborator Filtering:** The solver workflow will only execute for issues created by repository collaborators, members, or owners (`OWNER`, `MEMBER`, `COLLABORATOR`). External or untrusted user issues will not consume your Antigravity quota unless explicitly labeled with `agent:solve` by a maintainer.
 - **Container Sandboxing:** All agent execution and file modifications occur inside ephemeral Docker containers without host privilege escalation.
+- **Credential Protection:** Authentication keys are injected via GitHub Actions secrets and are never committed to git.
