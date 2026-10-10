@@ -22,7 +22,8 @@ tar -czf "$TEMP_TAR" -C "$HOME" \
     .gemini/settings.json \
     .gemini/state.json \
     .gemini/antigravity-cli/installation_id \
-    .gemini/antigravity-cli/settings.json
+    .gemini/antigravity-cli/settings.json \
+    .gemini/antigravity-cli/jetski_state.pbtxt
 
 ENCODED=$(base64 -w 0 < "$TEMP_TAR")
 rm -f "$TEMP_TAR"
