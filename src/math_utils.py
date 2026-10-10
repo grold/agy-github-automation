@@ -14,3 +14,11 @@ def divide(a: float, b: float) -> float:
         raise ValueError("Cannot divide by zero")
     return a / b
 
+def gcd(a: int, b: int) -> int:
+    """Returns the greatest common divisor of a and b using the Euclidean algorithm."""
+    if a < 0 or b < 0:
+        raise ValueError("Inputs must be non-negative integers")
+    while b:
+        a, b = b, a % b
+    return a
+
