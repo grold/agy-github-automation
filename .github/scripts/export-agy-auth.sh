@@ -4,6 +4,7 @@ set -euo pipefail
 # This script packages your local Antigravity credentials into a base64 string
 # suitable for storing as a GitHub Actions secret (AGY_AUTH_BASE64).
 
+REPO="${1:-}"
 GEMINI_DIR="${HOME}/.gemini"
 
 if [ ! -d "$GEMINI_DIR" ]; then
@@ -14,7 +15,6 @@ fi
 echo "Packaging credentials from $GEMINI_DIR..."
 
 # Check for Linux Secret Service keyring token
-KEYRING_FILE="${HOME}/.gemini/keyring_token.json"
 KEYRING_SECRET=""
 if command -v secret-tool >/dev/null 2>&1; then
   KEYRING_SECRET=$(secret-tool lookup service gemini username antigravity 2>/dev/null || true)
@@ -35,34 +35,46 @@ except Exception:
 ' 2>/dev/null || true)
 fi
 
+TEMP_DIR=$(mktemp -d)
+mkdir -p "$TEMP_DIR/.gemini/antigravity-cli"
+
 if [ -n "$KEYRING_SECRET" ]; then
-  echo "$KEYRING_SECRET" > "$KEYRING_FILE"
+  echo "$KEYRING_SECRET" > "$TEMP_DIR/.gemini/keyring_token.json"
+  echo "Included Secret Service keyring token."
 fi
 
-# Archive auth credentials, essential settings, and keyring token
-TEMP_TAR=$(mktemp)
-tar -czf "$TEMP_TAR" -C "$HOME" \
-    $( [ -f "$KEYRING_FILE" ] && echo ".gemini/keyring_token.json" ) \
-    .gemini/oauth_creds.json \
-    .gemini/google_accounts.json \
-    .gemini/installation_id \
-    .gemini/settings.json \
-    .gemini/state.json \
-    .gemini/antigravity-cli/installation_id \
-    .gemini/antigravity-cli/settings.json \
-    .gemini/antigravity-cli/jetski_state.pbtxt
+for f in settings.json state.json oauth_creds.json google_accounts.json installation_id; do
+  if [ -f "$HOME/.gemini/$f" ]; then
+    cp "$HOME/.gemini/$f" "$TEMP_DIR/.gemini/"
+  fi
+done
 
-rm -f "$KEYRING_FILE"
+for f in settings.json jetski_state.pbtxt installation_id; do
+  if [ -f "$HOME/.gemini/antigravity-cli/$f" ]; then
+    cp "$HOME/.gemini/antigravity-cli/$f" "$TEMP_DIR/.gemini/antigravity-cli/"
+  fi
+done
+
+TEMP_TAR=$(mktemp)
+tar -czf "$TEMP_TAR" -C "$TEMP_DIR" .gemini
+rm -rf "$TEMP_DIR"
+
 ENCODED=$(base64 -w 0 < "$TEMP_TAR")
 rm -f "$TEMP_TAR"
 
-echo ""
-echo "=========================================================================="
-echo "Base64 credential payload created successfully!"
-echo "Add this as a Secret in your GitHub repository:"
-echo "  Name:  AGY_AUTH_BASE64"
-echo "=========================================================================="
-echo ""
-echo "Run this command to set it directly using the GitHub CLI (gh):"
-echo "  gh secret set AGY_AUTH_BASE64 --body \"$ENCODED\""
-echo ""
+if [ -n "$REPO" ]; then
+  echo "Setting AGY_AUTH_BASE64 secret directly for $REPO..."
+  echo "$ENCODED" | gh secret set AGY_AUTH_BASE64 -R "$REPO"
+  echo "Secret successfully set for $REPO!"
+else
+  echo ""
+  echo "=========================================================================="
+  echo "Base64 credential payload created successfully!"
+  echo "Add this as a Secret in your GitHub repository:"
+  echo "  Name:  AGY_AUTH_BASE64"
+  echo "=========================================================================="
+  echo ""
+  echo "Run this command to set it directly using the GitHub CLI (gh):"
+  echo "  bash .github/scripts/export-agy-auth.sh <owner/repo>"
+  echo ""
+fi

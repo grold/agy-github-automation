@@ -31,9 +31,26 @@ if command -v gnome-keyring-daemon >/dev/null 2>&1; then
 fi
 
 # If keyring token exists, store it into the container keyring
-if [ -f "$HOME/.gemini/keyring_token.json" ] && command -v secret-tool >/dev/null 2>&1; then
-  secret-tool store --label="Password for 'antigravity' on 'gemini'" service gemini username antigravity < "$HOME/.gemini/keyring_token.json"
-  echo "Restored Antigravity token to Secret Service keyring"
+if [ -f "$HOME/.gemini/keyring_token.json" ]; then
+  python3 -c '
+import sys, os
+try:
+    import secretstorage
+    bus = secretstorage.dbus_init()
+    collection = secretstorage.get_default_collection(bus)
+    if collection.is_locked():
+        collection.unlock()
+    with open(os.path.expanduser("~/.gemini/keyring_token.json"), "r") as f:
+        secret = f.read().strip()
+    collection.create_item("Password for \x27antigravity\x27 on \x27gemini\x27", {"service": "gemini", "username": "antigravity"}, secret.encode("utf-8"), replace=True)
+    print("Successfully restored token to Secret Service via Python secretstorage")
+except Exception as e:
+    print(f"Python secretstorage: {e}", file=sys.stderr)
+' || true
+
+  if command -v secret-tool >/dev/null 2>&1; then
+    secret-tool store --label="Password for 'antigravity' on 'gemini'" service gemini username antigravity < "$HOME/.gemini/keyring_token.json" 2>/dev/null || true
+  fi
 fi
 
 BRANCH_NAME="agent/issue-${ISSUE_NUMBER}"
