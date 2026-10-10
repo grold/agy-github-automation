@@ -22,6 +22,10 @@ creds.json
 auth.json
 *.tar.gz
 *.tar
+.gemini/
+*oauth*token*
+keyring*.json
+oauth_client.json
 
 # Build outputs & caches
 dist/
