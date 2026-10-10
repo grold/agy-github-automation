@@ -13,9 +13,36 @@ fi
 
 echo "Packaging credentials from $GEMINI_DIR..."
 
-# Archive only auth credentials and essential settings
+# Check for Linux Secret Service keyring token
+KEYRING_FILE="${HOME}/.gemini/keyring_token.json"
+KEYRING_SECRET=""
+if command -v secret-tool >/dev/null 2>&1; then
+  KEYRING_SECRET=$(secret-tool lookup service gemini username antigravity 2>/dev/null || true)
+fi
+
+if [ -z "$KEYRING_SECRET" ]; then
+  KEYRING_SECRET=$(python3 -c '
+import secretstorage
+try:
+    bus = secretstorage.dbus_init()
+    collection = secretstorage.get_default_collection(bus)
+    for item in collection.get_all_items():
+        if item.get_attributes().get("service") == "gemini":
+            print(item.get_secret().decode("utf-8"))
+            break
+except Exception:
+    pass
+' 2>/dev/null || true)
+fi
+
+if [ -n "$KEYRING_SECRET" ]; then
+  echo "$KEYRING_SECRET" > "$KEYRING_FILE"
+fi
+
+# Archive auth credentials, essential settings, and keyring token
 TEMP_TAR=$(mktemp)
 tar -czf "$TEMP_TAR" -C "$HOME" \
+    $( [ -f "$KEYRING_FILE" ] && echo ".gemini/keyring_token.json" ) \
     .gemini/oauth_creds.json \
     .gemini/google_accounts.json \
     .gemini/installation_id \
@@ -25,6 +52,7 @@ tar -czf "$TEMP_TAR" -C "$HOME" \
     .gemini/antigravity-cli/settings.json \
     .gemini/antigravity-cli/jetski_state.pbtxt
 
+rm -f "$KEYRING_FILE"
 ENCODED=$(base64 -w 0 < "$TEMP_TAR")
 rm -f "$TEMP_TAR"
 

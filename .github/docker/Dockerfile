@@ -23,6 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3 \
     sudo \
+    dbus \
+    dbus-x11 \
+    gnome-keyring \
+    libsecret-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI (gh)

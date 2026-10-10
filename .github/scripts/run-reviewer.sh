@@ -18,6 +18,22 @@ else
   echo "Warning: AGY_AUTH_BASE64 is not set."
 fi
 
+# Initialize D-Bus session and GNOME Keyring for Secret Service provider
+if command -v dbus-launch >/dev/null 2>&1; then
+  eval $(dbus-launch --sh-syntax)
+  export DBUS_SESSION_BUS_ADDRESS
+fi
+
+if command -v gnome-keyring-daemon >/dev/null 2>&1; then
+  eval $(echo "" | gnome-keyring-daemon --unlock 2>/dev/null || true)
+fi
+
+# If keyring token exists, store it into the container keyring
+if [ -f "$HOME/.gemini/keyring_token.json" ] && command -v secret-tool >/dev/null 2>&1; then
+  secret-tool store --label="Password for 'antigravity' on 'gemini'" service gemini username antigravity < "$HOME/.gemini/keyring_token.json"
+  echo "Restored Antigravity token to Secret Service keyring"
+fi
+
 echo "=== Step 2: Fetching PR Metadata and Diff ==="
 PR_JSON=$(gh pr view "$PR_NUMBER" --json title,body,headRefOid,baseRefName)
 PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
