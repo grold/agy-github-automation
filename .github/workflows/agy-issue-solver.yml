@@ -46,17 +46,25 @@ jobs:
 
       - name: Configure Git identity
         run: |
-          BOT_NAME="${{ steps.app-token.outputs.app-slug && format('{0}[bot]', steps.app-token.outputs.app-slug) || 'antigravity-bot[bot]' }}"
-          BOT_EMAIL="${{ steps.app-token.outputs.app-slug && format('{0}[bot]@users.noreply.github.com', steps.app-token.outputs.app-slug) || 'antigravity-bot[bot]@users.noreply.github.com' }}"
+          SLUG="${{ steps.app-token.outputs.app-slug }}"
+          if [ -n "$SLUG" ]; then
+            BOT_NAME="${SLUG}[bot]"
+            BOT_EMAIL="${SLUG}[bot]@users.noreply.github.com"
+          else
+            BOT_NAME="antigravity-bot[bot]"
+            BOT_EMAIL="antigravity-bot[bot]@users.noreply.github.com"
+          fi
           git config --global user.name "$BOT_NAME"
           git config --global user.email "$BOT_EMAIL"
+          echo "BOT_NAME=$BOT_NAME" >> "$GITHUB_ENV"
+          echo "BOT_EMAIL=$BOT_EMAIL" >> "$GITHUB_ENV"
 
       - name: Execute Issue Solver Agent in Isolated Container
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          BOT_NAME: ${{ steps.app-token.outputs.app-slug && format('{0}[bot]', steps.app-token.outputs.app-slug) || 'antigravity-bot[bot]' }}
-          BOT_EMAIL: ${{ steps.app-token.outputs.app-slug && format('{0}[bot]@users.noreply.github.com', steps.app-token.outputs.app-slug) || 'antigravity-bot[bot]@users.noreply.github.com' }}
+          BOT_NAME: ${{ env.BOT_NAME }}
+          BOT_EMAIL: ${{ env.BOT_EMAIL }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title || 'Manual Trigger' }}
