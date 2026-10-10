@@ -13,13 +13,16 @@ fi
 
 echo "Packaging credentials from $GEMINI_DIR..."
 
-# Archive ~/.gemini excluding unnecessary caches/logs/tmp
+# Archive only auth credentials and essential settings
 TEMP_TAR=$(mktemp)
-tar --exclude="tmp" \
-    --exclude="history" \
-    --exclude="antigravity-cli/brain" \
-    --exclude="antigravity-cli/logs" \
-    -czf "$TEMP_TAR" -C "$HOME" .gemini
+tar -czf "$TEMP_TAR" -C "$HOME" \
+    .gemini/oauth_creds.json \
+    .gemini/google_accounts.json \
+    .gemini/installation_id \
+    .gemini/settings.json \
+    .gemini/state.json \
+    .gemini/antigravity-cli/installation_id \
+    .gemini/antigravity-cli/settings.json
 
 ENCODED=$(base64 -w 0 < "$TEMP_TAR")
 rm -f "$TEMP_TAR"
