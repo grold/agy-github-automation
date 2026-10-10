@@ -23,6 +23,11 @@ fi
 BRANCH_NAME="agent/issue-${ISSUE_NUMBER}"
 
 echo "=== Step 2: Preparing Branch '${BRANCH_NAME}' ==="
+git config --global user.name "antigravity-bot[bot]"
+git config --global user.email "antigravity-bot[bot]@users.noreply.github.com"
+if [ -n "${GH_TOKEN:-}" ]; then
+  git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+fi
 git checkout -B "$BRANCH_NAME" "origin/${BASE_BRANCH}"
 
 echo "=== Step 3: Invoking Antigravity Agent ==="
