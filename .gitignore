@@ -1,0 +1,32 @@
+# OS and Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Logs and runtime artifacts
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Credentials and secrets
+.env
+.env.*
+*.pem
+*.key
+creds.json
+auth.json
+*.tar.gz
+*.tar
+
+# Build outputs & caches
+dist/
+build/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
