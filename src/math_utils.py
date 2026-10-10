@@ -7,3 +7,10 @@ def add(a: float, b: float) -> float:
 def multiply(a: float, b: float) -> float:
     """Returns the product of a and b."""
     return a * b
+
+def divide(a: float, b: float) -> float:
+    """Returns the quotient of a and b."""
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+
