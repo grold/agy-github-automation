@@ -40,6 +40,69 @@ mkdir -p "$TEMP_DIR/.gemini/antigravity-cli"
 
 if [ -n "$KEYRING_SECRET" ]; then
   echo "$KEYRING_SECRET" > "$TEMP_DIR/.gemini/keyring_token.json"
+  python3 -c "
+import json, urllib.request, urllib.parse, datetime, sys, os, glob, re
+
+token_path = sys.argv[1]
+temp_dir = sys.argv[2]
+
+client_id = None
+client_secret = None
+
+search_dirs = [
+    os.path.expanduser('~/.local/share/mise/installs/antigravity-cli/latest/antigravity'),
+    '/opt/mise/installs/antigravity-cli/latest/antigravity',
+]
+for fpath in search_dirs:
+    if os.path.isfile(fpath):
+        try:
+            with open(fpath, 'rb') as f:
+                data = f.read()
+            sec_match = re.search(rb'(GOCSPX-[a-zA-Z0-9_-]{28})', data)
+            if sec_match:
+                client_secret = sec_match.group(1).decode()
+                for cid_match in re.finditer(rb'([0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com)', data):
+                    c = cid_match.group(1).decode()
+                    if '1071006060591' in c:
+                        client_id = c
+                        break
+                if client_id and client_secret:
+                    break
+        except Exception:
+            continue
+
+if client_id and client_secret:
+    with open(os.path.join(temp_dir, '.gemini', 'oauth_client.json'), 'w') as f:
+        json.dump({'client_id': client_id, 'client_secret': client_secret}, f)
+
+    try:
+        with open(token_path, 'r') as f:
+            data = json.load(f)
+        refresh_token = data.get('token', {}).get('refresh_token')
+        if refresh_token:
+            body = urllib.parse.urlencode({
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'grant_type': 'refresh_token',
+                'refresh_token': refresh_token,
+            }).encode()
+            req = urllib.request.Request('https://oauth2.googleapis.com/token', data=body)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                res = json.loads(resp.read().decode())
+            data['token']['access_token'] = res['access_token']
+            if 'refresh_token' in res:
+                data['token']['refresh_token'] = res['refresh_token']
+            if 'id_token' in res:
+                data['id_token'] = res['id_token']
+            expires_in = res.get('expires_in', 3600)
+            new_expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)
+            data['token']['expiry'] = new_expiry.isoformat()
+            with open(token_path, 'w') as f:
+                json.dump(data, f)
+            print('Refreshed token before packaging.')
+    except Exception as e:
+        print(f'Token refresh check: {e}')
+" "$TEMP_DIR/.gemini/keyring_token.json" "$TEMP_DIR" 2>/dev/null || true
   echo "Included Secret Service keyring token."
 fi
 

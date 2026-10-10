@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, hmac, hashlib
+import sys, os, hmac, hashlib, glob, re
 import dbus
 import dbus.service
 import dbus.mainloop.glib
@@ -165,8 +165,84 @@ class SecretItem(dbus.service.Object):
             "Locked": dbus.Boolean(False, variant_level=1)
         }
 
+def find_oauth_credentials():
+    # 1. Check ~/.gemini/oauth_client.json
+    creds_file = os.path.expanduser("~/.gemini/oauth_client.json")
+    if os.path.exists(creds_file):
+        try:
+            import json
+            with open(creds_file, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                return d.get("client_id"), d.get("client_secret")
+        except Exception:
+            pass
+
+    # 2. Extract dynamically from installed antigravity binary
+    search_dirs = [
+        "/opt/mise/installs/antigravity-cli/latest/antigravity",
+        os.path.expanduser("~/.local/share/mise/installs/antigravity-cli/latest/antigravity"),
+    ]
+    for fpath in search_dirs:
+        if os.path.isfile(fpath):
+            try:
+                with open(fpath, "rb") as f:
+                    data = f.read()
+                sec_match = re.search(rb"(GOCSPX-[a-zA-Z0-9_-]{28})", data)
+                if sec_match:
+                    sec = sec_match.group(1).decode()
+                    for cid_match in re.finditer(rb"([0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com)", data):
+                        c = cid_match.group(1).decode()
+                        if "1071006060591" in c:
+                            return c, sec
+            except Exception:
+                continue
+    return None, None
+
+def refresh_token_if_needed(token_path):
+    import json, urllib.request, urllib.parse, datetime
+    try:
+        with open(token_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        refresh_token = data.get("token", {}).get("refresh_token")
+        if not refresh_token:
+            return
+
+        client_id, client_secret = find_oauth_credentials()
+        if not client_id or not client_secret:
+            return
+
+        body = urllib.parse.urlencode({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        }).encode()
+
+        req = urllib.request.Request("https://oauth2.googleapis.com/token", data=body)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            res = json.loads(resp.read().decode())
+
+        data["token"]["access_token"] = res["access_token"]
+        if "refresh_token" in res:
+            data["token"]["refresh_token"] = res["refresh_token"]
+        if "id_token" in res:
+            data["id_token"] = res["id_token"]
+
+        expires_in = res.get("expires_in", 3600)
+        new_expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)
+        data["token"]["expiry"] = new_expiry.isoformat()
+
+        with open(token_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        print(f"Refreshed Antigravity access token successfully (expires in {expires_in}s)", flush=True)
+    except Exception as e:
+        print(f"Warning: Token refresh check: {e}", file=sys.stderr, flush=True)
+
 def main():
     token_file = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/.gemini/keyring_token.json")
+    if os.path.exists(token_file):
+        refresh_token_if_needed(token_file)
+
     with open(token_file, "rb") as f:
         token_bytes = f.read().strip()
 
