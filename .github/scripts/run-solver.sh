@@ -20,37 +20,14 @@ else
   echo "Warning: AGY_AUTH_BASE64 is not set. Assuming ~/.gemini is already mounted."
 fi
 
-# Initialize D-Bus session and GNOME Keyring for Secret Service provider
-if command -v dbus-launch >/dev/null 2>&1; then
-  eval $(dbus-launch --sh-syntax)
-  export DBUS_SESSION_BUS_ADDRESS
-fi
-
-if command -v gnome-keyring-daemon >/dev/null 2>&1; then
-  eval $(echo "" | gnome-keyring-daemon --unlock 2>/dev/null || true)
-fi
-
-# If keyring token exists, store it into the container keyring
+# Start isolated D-Bus daemon and headless Secret Service
 if [ -f "$HOME/.gemini/keyring_token.json" ]; then
-  python3 -c '
-import sys, os
-try:
-    import secretstorage
-    bus = secretstorage.dbus_init()
-    collection = secretstorage.get_default_collection(bus)
-    if collection.is_locked():
-        collection.unlock()
-    with open(os.path.expanduser("~/.gemini/keyring_token.json"), "r") as f:
-        secret = f.read().strip()
-    collection.create_item("Password for \x27antigravity\x27 on \x27gemini\x27", {"service": "gemini", "username": "antigravity"}, secret.encode("utf-8"), replace=True)
-    print("Successfully restored token to Secret Service via Python secretstorage")
-except Exception as e:
-    print(f"Python secretstorage: {e}", file=sys.stderr)
-' || true
-
-  if command -v secret-tool >/dev/null 2>&1; then
-    secret-tool store --label="Password for 'antigravity' on 'gemini'" service gemini username antigravity < "$HOME/.gemini/keyring_token.json" 2>/dev/null || true
-  fi
+  echo "Starting headless Secret Service for Antigravity..."
+  export DBUS_SESSION_BUS_ADDRESS=$(dbus-daemon --session --print-address --fork)
+  python3 /workspace/.github/scripts/mock-secret-service.py "$HOME/.gemini/keyring_token.json" &
+  MOCK_SECRET_PID=$!
+  sleep 1
+  trap "kill $MOCK_SECRET_PID 2>/dev/null || true" EXIT
 fi
 
 BRANCH_NAME="agent/issue-${ISSUE_NUMBER}"
