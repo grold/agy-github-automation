@@ -33,3 +33,10 @@ Your final output MUST be valid JSON enclosed in a ```json codeblock (or raw JSO
 - Focus on substantive issues, bugs, and edge cases. Avoid nitpicking formatting unless it violates repository conventions.
 - Only attach line comments to lines that are modified or added in the diff.
 - If no line comments are needed, `comments` should be an empty list `[]`.
+
+## GitHub Attribution Rule
+Always append a footer at the very end of the review `summary` attributing the AI assistance:
+```markdown
+---
+*Assisted by Gemini 3.8 Flash (Reasoning: Medium)*
+```

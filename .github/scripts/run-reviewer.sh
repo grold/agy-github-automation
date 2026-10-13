@@ -111,6 +111,11 @@ if [[ "$EVENT" != "APPROVE" && "$EVENT" != "REQUEST_CHANGES" && "$EVENT" != "COM
 fi
 
 SUMMARY=$(echo "$PARSED_JSON" | jq -r '.summary // "Review completed."')
+ATTRIBUTION="
+
+---
+*Assisted by ${AI_MODEL_NAME:-Gemini 3.8 Flash} (Reasoning: ${AI_REASONING_EFFORT:-Medium})*"
+SUMMARY="${SUMMARY}${ATTRIBUTION}"
 COMMENTS=$(echo "$PARSED_JSON" | jq '.comments // []')
 
 echo "Review decision: $EVENT"

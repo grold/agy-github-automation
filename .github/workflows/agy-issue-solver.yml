@@ -71,6 +71,8 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body || '' }}
           AGY_AUTH_BASE64: ${{ secrets.AGY_AUTH_BASE64 }}
           BASE_BRANCH: ${{ github.event.repository.default_branch || 'main' }}
+          AI_MODEL_NAME: "Gemini 3.8 Flash"
+          AI_REASONING_EFFORT: "Medium"
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/workspace" \
@@ -85,5 +87,7 @@ jobs:
             -e ISSUE_BODY \
             -e AGY_AUTH_BASE64 \
             -e BASE_BRANCH \
+            -e AI_MODEL_NAME \
+            -e AI_REASONING_EFFORT \
             agy-runner:latest \
             /workspace/.github/scripts/run-solver.sh

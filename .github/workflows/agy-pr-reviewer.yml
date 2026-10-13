@@ -46,6 +46,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
           AGY_AUTH_BASE64: ${{ secrets.AGY_AUTH_BASE64 }}
+          AI_MODEL_NAME: "Gemini 3.8 Flash"
+          AI_REASONING_EFFORT: "Medium"
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/workspace" \
@@ -55,5 +57,7 @@ jobs:
             -e GITHUB_REPOSITORY \
             -e PR_NUMBER \
             -e AGY_AUTH_BASE64 \
+            -e AI_MODEL_NAME \
+            -e AI_REASONING_EFFORT \
             agy-runner:latest \
             /workspace/.github/scripts/run-reviewer.sh
