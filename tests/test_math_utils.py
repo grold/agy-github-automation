@@ -1,6 +1,6 @@
 """Tests for math_utils module."""
 import unittest
-from src.math_utils import add, multiply, divide
+from src.math_utils import add, multiply, divide, modulo
 
 class TestMathUtils(unittest.TestCase):
     def test_add(self):
@@ -34,6 +34,27 @@ class TestMathUtils(unittest.TestCase):
 
         with self.assertRaises(ValueError) as context:
             divide(0, 0)
+        self.assertEqual(str(context.exception), "Cannot divide by zero")
+
+    def test_modulo(self):
+        self.assertEqual(modulo(10, 3), 1)
+        self.assertEqual(modulo(10, 5), 0)
+        self.assertEqual(modulo(0, 5), 0)
+        self.assertEqual(modulo(-10, 3), 2)
+        self.assertEqual(modulo(10, -3), -2)
+        self.assertEqual(modulo(-10, -3), -1)
+
+    def test_modulo_by_zero(self):
+        with self.assertRaises(ValueError) as context:
+            modulo(10, 0)
+        self.assertEqual(str(context.exception), "Cannot divide by zero")
+
+        with self.assertRaises(ValueError) as context:
+            modulo(0, 0)
+        self.assertEqual(str(context.exception), "Cannot divide by zero")
+
+        with self.assertRaises(ValueError) as context:
+            modulo(-10, 0)
         self.assertEqual(str(context.exception), "Cannot divide by zero")
 
 if __name__ == '__main__':

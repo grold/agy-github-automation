@@ -14,3 +14,10 @@ def divide(a: float, b: float) -> float:
         raise ValueError("Cannot divide by zero")
     return a / b
 
+def modulo(a: int, b: int) -> int:
+    """Returns the remainder of dividing a by b."""
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a % b
+
+
