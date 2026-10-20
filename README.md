@@ -81,6 +81,15 @@ You don't need to copy any Dockerfiles or scripts! In any of your target reposit
    Go to [GitHub App Installations](https://github.com/settings/apps/grold-agy-bot/installations) and add your target repository.
 2. **Add Repository Secrets**:
    Set `APP_ID`, `APP_PRIVATE_KEY`, and `AGY_AUTH_BASE64` in the target repository's **Settings → Secrets and variables → Actions**.
+   
+   > [!TIP]
+   > **How to get or generate a fresh `APP_PRIVATE_KEY`:**
+   > - **Existing key:** Check your computer's `~/Downloads` folder for the `.pem` file downloaded during App creation (e.g. `grold-agy-bot.*.private-key.pem`).
+   > - **Generate a fresh key at any time:**
+   >   1. Go to your GitHub account: **Settings → Developer Settings → GitHub Apps** (or visit `https://github.com/settings/apps/<your-app-slug>`).
+   >   2. Scroll down to the **"Private keys"** section at the bottom.
+   >   3. Click **"Generate a private key"**. GitHub will download a new `.pem` file to your browser.
+   >   4. Set it directly via the CLI: `gh secret set APP_PRIVATE_KEY -R <owner>/<repo> < path/to/key.pem` (or open the `.pem` file in a text editor and paste the full contents into the secret value).
 3. **Create Caller Workflows**:
    Create `.github/workflows/solve.yml` in the target repository:
    ```yaml
@@ -148,6 +157,9 @@ python3 .github/scripts/setup-github-app.py <owner>/<repo> [bot-name]
 2. Click **Create GitHub App**.
 3. Install the app on your repository.
 4. The script automatically stores `APP_ID` and `APP_PRIVATE_KEY` directly in your repository secrets!
+
+> [!NOTE]
+> If you ever need to generate a new private key manually, navigate to **Settings → Developer Settings → GitHub Apps → [Your App]**, scroll down to **Private keys**, and click **Generate a private key**.
 
 *(Alternative: You can provide a Personal Access Token stored as `BOT_GITHUB_TOKEN`, but actions will appear under that user account rather than a `[bot]` identity).*
 
