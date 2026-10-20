@@ -105,19 +105,33 @@ EOF
 
 AI_MODEL_NAME="${AI_MODEL_NAME:-Gemini 3.8 Flash}"
 AI_REASONING_EFFORT="${AI_REASONING_EFFORT:-Medium}"
+EFFORT_LOWER=$(echo "$AI_REASONING_EFFORT" | tr '[:upper:]' '[:lower:]')
 
-EFFORT_ARGS=()
-if [ -n "${AI_REASONING_EFFORT:-}" ]; then
-  EFFORT_ARGS=(--effort "$(echo "$AI_REASONING_EFFORT" | tr '[:upper:]' '[:lower:]')")
+CLI_MODEL=""
+if [[ "$AI_MODEL_NAME" =~ ^[a-z0-9.-]+$ ]] && [[ "$AI_MODEL_NAME" != *" "* ]]; then
+  CLI_MODEL="$AI_MODEL_NAME"
+else
+  NORMALIZED=$(echo "$AI_MODEL_NAME" | tr '[:upper:]' '[:lower:]')
+  if [[ "$NORMALIZED" == *"gemini"* && "$NORMALIZED" == *"flash"* ]]; then
+    CLI_MODEL="gemini-3.8-flash-${EFFORT_LOWER}"
+  elif [[ "$NORMALIZED" == *"gemini"* && "$NORMALIZED" == *"argon"* ]]; then
+    CLI_MODEL="gemini-4-argon-${EFFORT_LOWER}"
+  elif [[ "$NORMALIZED" == *"claude"* && "$NORMALIZED" == *"opus"* ]]; then
+    CLI_MODEL="claude-opus-5-5-${EFFORT_LOWER}"
+  elif [[ "$NORMALIZED" == *"claude"* && "$NORMALIZED" == *"sonnet"* ]]; then
+    CLI_MODEL="claude-sonnet-5-5-${EFFORT_LOWER}"
+  fi
 fi
 
 MODEL_ARGS=()
-if [ -n "${AI_MODEL_NAME:-}" ]; then
-  MODEL_ARGS=(--model "$AI_MODEL_NAME")
+if [ -n "$CLI_MODEL" ]; then
+  MODEL_ARGS=(--model "$CLI_MODEL")
+elif [ -n "$EFFORT_LOWER" ]; then
+  MODEL_ARGS=(--effort "$EFFORT_LOWER")
 fi
 
 # Run agy in headless non-interactive print mode with auto-approved permissions
-agy -p "$SOLVER_PROMPT" "${MODEL_ARGS[@]}" "${EFFORT_ARGS[@]}" --dangerously-skip-permissions
+agy -p "$SOLVER_PROMPT" "${MODEL_ARGS[@]}" --dangerously-skip-permissions
 
 echo "=== Step 4: Checking Working Tree Changes ==="
 if [ -z "$(git status --porcelain)" ]; then
