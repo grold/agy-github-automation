@@ -1,7 +1,7 @@
 # Dockerfile for Antigravity (agy) GitHub Actions Runner
 FROM ubuntu:24.04
 
-LABEL maintainer="Antigravity Automation"
+LABEL maintainer="grold"
 LABEL description="Isolated container environment for Antigravity (agy) headless CI/CD execution"
 
 # Prevent interactive prompts during package installation
