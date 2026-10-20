@@ -1,6 +1,26 @@
 name: Antigravity PR Reviewer
 
 on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "Pull Request number to review"
+        required: false
+        type: string
+      runner_image:
+        description: "Runner container image to use"
+        required: false
+        type: string
+        default: "ghcr.io/grold/agy-runner:latest"
+    secrets:
+      AGY_AUTH_BASE64:
+        required: false
+      APP_ID:
+        required: false
+      APP_PRIVATE_KEY:
+        required: false
+      BOT_GITHUB_TOKEN:
+        required: false
   pull_request:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
@@ -9,6 +29,11 @@ on:
         description: "Pull Request number to review"
         required: true
         type: string
+      runner_image:
+        description: "Runner container image to use"
+        required: false
+        type: string
+        default: "ghcr.io/grold/agy-runner:latest"
 
 permissions:
   contents: read
@@ -20,7 +45,6 @@ jobs:
     name: Review PR with Antigravity
     runs-on: ubuntu-latest
 
-    # Optional: Skip review on PRs from external unvetted forks if desired, or run on all PRs opened/synced
     steps:
       - name: Generate GitHub App Token
         id: app-token
@@ -36,8 +60,16 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Build Runner Container
-        run: docker build -t agy-runner:latest -f .github/docker/Dockerfile .
+      - name: Prepare Runner Container
+        run: |
+          IMAGE="${{ inputs.runner_image || 'ghcr.io/grold/agy-runner:latest' }}"
+          echo "PULLING_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          if docker pull "$IMAGE"; then
+            echo "Successfully pulled $IMAGE"
+          else
+            echo "Image $IMAGE not yet found in registry. Falling back to local build..."
+            docker build -t "$IMAGE" -f .github/docker/Dockerfile .
+          fi
 
       - name: Execute PR Reviewer Agent in Isolated Container
         env:
@@ -59,5 +91,5 @@ jobs:
             -e AGY_AUTH_BASE64 \
             -e AI_MODEL_NAME \
             -e AI_REASONING_EFFORT \
-            agy-runner:latest \
-            /workspace/.github/scripts/run-reviewer.sh
+            "$PULLING_IMAGE" \
+            bash -c "if [ -x /opt/agy-automation/scripts/run-reviewer.sh ]; then /opt/agy-automation/scripts/run-reviewer.sh; else /workspace/.github/scripts/run-reviewer.sh; fi"

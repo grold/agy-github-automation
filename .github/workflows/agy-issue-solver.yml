@@ -1,6 +1,31 @@
 name: Antigravity Issue Solver
 
 on:
+  workflow_call:
+    inputs:
+      issue_number:
+        description: "Issue number to solve"
+        required: false
+        type: string
+      base_branch:
+        description: "Target base branch for PR"
+        required: false
+        type: string
+        default: "main"
+      runner_image:
+        description: "Runner container image to use"
+        required: false
+        type: string
+        default: "ghcr.io/grold/agy-runner:latest"
+    secrets:
+      AGY_AUTH_BASE64:
+        required: false
+      APP_ID:
+        required: false
+      APP_PRIVATE_KEY:
+        required: false
+      BOT_GITHUB_TOKEN:
+        required: false
   issues:
     types: [opened, labeled]
   workflow_dispatch:
@@ -9,6 +34,11 @@ on:
         description: "Issue number to solve"
         required: true
         type: string
+      runner_image:
+        description: "Runner container image to use"
+        required: false
+        type: string
+        default: "ghcr.io/grold/agy-runner:latest"
 
 permissions:
   contents: write
@@ -20,8 +50,9 @@ jobs:
     name: Solve Issue with Antigravity
     runs-on: ubuntu-latest
 
-    # Only run for authorized repository collaborators/members/owners or when labeled 'agent:solve'
+    # Only run when called via workflow_call, workflow_dispatch, opened by collaborators, or labeled agent:solve
     if: >
+      github.event_name == 'workflow_call' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event.action == 'opened' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
       (github.event.action == 'labeled' && github.event.label.name == 'agent:solve')
@@ -41,8 +72,16 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Build Runner Container
-        run: docker build -t agy-runner:latest -f .github/docker/Dockerfile .
+      - name: Prepare Runner Container
+        run: |
+          IMAGE="${{ inputs.runner_image || 'ghcr.io/grold/agy-runner:latest' }}"
+          echo "PULLING_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          if docker pull "$IMAGE"; then
+            echo "Successfully pulled $IMAGE"
+          else
+            echo "Image $IMAGE not yet found in registry. Falling back to local build..."
+            docker build -t "$IMAGE" -f .github/docker/Dockerfile .
+          fi
 
       - name: Configure Git identity
         run: |
@@ -70,7 +109,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title || 'Manual Trigger' }}
           ISSUE_BODY: ${{ github.event.issue.body || '' }}
           AGY_AUTH_BASE64: ${{ secrets.AGY_AUTH_BASE64 }}
-          BASE_BRANCH: ${{ github.event.repository.default_branch || 'main' }}
+          BASE_BRANCH: ${{ inputs.base_branch || github.event.repository.default_branch || 'main' }}
           AI_MODEL_NAME: "Gemini 3.8 Flash"
           AI_REASONING_EFFORT: "Medium"
         run: |
@@ -89,5 +128,5 @@ jobs:
             -e BASE_BRANCH \
             -e AI_MODEL_NAME \
             -e AI_REASONING_EFFORT \
-            agy-runner:latest \
-            /workspace/.github/scripts/run-solver.sh
+            "$PULLING_IMAGE" \
+            bash -c "if [ -x /opt/agy-automation/scripts/run-solver.sh ]; then /opt/agy-automation/scripts/run-solver.sh; else /workspace/.github/scripts/run-solver.sh; fi"

@@ -39,6 +39,8 @@ Autonomous issue-solving and PR-reviewing workflows powered by **Antigravity CLI
 
 ## ✨ Features
 
+- **Reusable Workflows (`workflow_call`)**: Use `grold/agy-github-automation` as a central hub. Any other repository can run the solver and reviewer with a simple 10-line YAML file—no files or scripts to copy!
+- **Prebuilt Container on GHCR**: Ships as `ghcr.io/grold/agy-runner:latest`, eliminating `docker build` overhead and booting in ~5 seconds.
 - **Autonomous End-to-End Resolution**: Automatically resolves issues, writes tests, creates PRs, and submits reviews.
 - **Dedicated Bot Attribution**: Commits, PRs, and review comments are posted under a dedicated bot identity (e.g. `grold-agy-bot [bot]`), keeping your personal profile clean.
 - **Chained Workflow Execution**: Uses GitHub App authentication so that opening a PR seamlessly triggers the downstream PR Reviewer workflow (which standard `GITHUB_TOKEN` suppresses).
@@ -71,7 +73,50 @@ Autonomous issue-solving and PR-reviewing workflows powered by **Antigravity CLI
 
 ## 🛠️ Setup Instructions
 
-### 1. Copy Template Files to Your Target Repository
+### Option A: Use as a Reusable Workflow in Another Repository (Recommended)
+
+You don't need to copy any Dockerfiles or scripts! In any of your target repositories:
+
+1. **Grant the GitHub App Access**:
+   Go to [GitHub App Installations](https://github.com/settings/apps/grold-agy-bot/installations) and add your target repository.
+2. **Add Repository Secrets**:
+   Set `APP_ID`, `APP_PRIVATE_KEY`, and `AGY_AUTH_BASE64` in the target repository's **Settings → Secrets and variables → Actions**.
+3. **Create Caller Workflows**:
+   Create `.github/workflows/solve.yml` in the target repository:
+   ```yaml
+   name: Antigravity Solver
+   on:
+     issues:
+       types: [opened, labeled]
+
+   jobs:
+     solve:
+       if: >
+         (github.event.action == 'opened' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
+         (github.event.action == 'labeled' && github.event.label.name == 'agent:solve')
+       uses: grold/agy-github-automation/.github/workflows/agy-issue-solver.yml@main
+       secrets: inherit
+   ```
+   And `.github/workflows/review.yml`:
+   ```yaml
+   name: Antigravity Reviewer
+   on:
+     pull_request:
+       types: [opened, synchronize, reopened]
+
+   jobs:
+     review:
+       uses: grold/agy-github-automation/.github/workflows/agy-pr-reviewer.yml@main
+       secrets: inherit
+   ```
+
+---
+
+### Option B: Standalone Repository Setup
+
+If you want to maintain a standalone clone with custom container modifications:
+
+#### 1. Copy Template Files to Your Target Repository
 Copy the `.github` directory into your target git repository:
 ```bash
 cp -r .github /path/to/your-repo/

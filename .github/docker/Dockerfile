@@ -48,6 +48,12 @@ RUN curl https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh \
 # Configure git safe directory
 RUN git config --global --add safe.directory "*"
 
+# Copy automation scripts and default agent prompts into the image
+COPY .github/scripts /opt/agy-automation/scripts
+COPY .github/agents /opt/agy-automation/agents
+RUN chmod +x /opt/agy-automation/scripts/*.sh /opt/agy-automation/scripts/*.py
+ENV PATH="/opt/agy-automation/scripts:${PATH}"
+
 # Set workdir
 WORKDIR /workspace
 

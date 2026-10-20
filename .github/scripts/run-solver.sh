@@ -30,11 +30,19 @@ fi
 export ANTIGRAVITY_APP_DATA_DIR="$HOME/.gemini/antigravity-cli"
 export ANTIGRAVITY_PROJECT_ID="default-cli-project"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 if [ -f "$HOME/.gemini/keyring_token.json" ]; then
   echo "Starting headless Secret Service for Antigravity..."
   export DBUS_SESSION_BUS_ADDRESS=$(dbus-daemon --session --print-address --fork)
   echo "DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"
-  python3 /workspace/.github/scripts/mock-secret-service.py "$HOME/.gemini/keyring_token.json" &
+  if [ -f "$SCRIPT_DIR/mock-secret-service.py" ]; then
+    python3 "$SCRIPT_DIR/mock-secret-service.py" "$HOME/.gemini/keyring_token.json" &
+  elif [ -f "/opt/agy-automation/scripts/mock-secret-service.py" ]; then
+    python3 /opt/agy-automation/scripts/mock-secret-service.py "$HOME/.gemini/keyring_token.json" &
+  else
+    python3 /workspace/.github/scripts/mock-secret-service.py "$HOME/.gemini/keyring_token.json" &
+  fi
   MOCK_SECRET_PID=$!
   sleep 1
   trap "kill $MOCK_SECRET_PID 2>/dev/null || true" EXIT
@@ -55,10 +63,13 @@ fi
 git checkout -B "$BRANCH_NAME" "origin/${BASE_BRANCH}"
 
 echo "=== Step 3: Invoking Antigravity Agent ==="
-PROMPT_FILE=".github/agents/solver.md"
 GUIDELINES=""
-if [ -f "$PROMPT_FILE" ]; then
-  GUIDELINES=$(cat "$PROMPT_FILE")
+if [ -f ".github/agents/solver.md" ]; then
+  GUIDELINES=$(cat ".github/agents/solver.md")
+elif [ -f "/opt/agy-automation/agents/solver.md" ]; then
+  GUIDELINES=$(cat "/opt/agy-automation/agents/solver.md")
+elif [ -f "$SCRIPT_DIR/../agents/solver.md" ]; then
+  GUIDELINES=$(cat "$SCRIPT_DIR/../agents/solver.md")
 fi
 
 SOLVER_PROMPT=$(cat <<EOF
