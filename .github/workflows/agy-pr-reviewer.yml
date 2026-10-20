@@ -157,6 +157,9 @@ jobs:
             "$PULLING_IMAGE" \
             bash -c "if [ -x /workspace/.github/scripts/run-reviewer.sh ]; then /workspace/.github/scripts/run-reviewer.sh; elif [ -x /opt/agy-automation/scripts/run-reviewer.sh ]; then /opt/agy-automation/scripts/run-reviewer.sh; fi"
 
+          # Restore host workspace file ownership
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
       - name: Post Review to GitHub
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}

@@ -65,7 +65,10 @@ fi
 BRANCH_NAME="agent/issue-${ISSUE_NUMBER}"
 
 echo "=== Step 2: Preparing Branch '${BRANCH_NAME}' ==="
-git checkout -B "$BRANCH_NAME" "origin/${BASE_BRANCH}" 2>/dev/null || git checkout -B "$BRANCH_NAME" "${BASE_BRANCH}" 2>/dev/null || true
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+if [ "$CURRENT_BRANCH" != "$BRANCH_NAME" ]; then
+  git checkout -B "$BRANCH_NAME" "origin/${BASE_BRANCH}" 2>/dev/null || git checkout -B "$BRANCH_NAME" "${BASE_BRANCH}" 2>/dev/null || true
+fi
 
 echo "=== Step 3: Invoking Antigravity Agent ==="
 GUIDELINES=""
