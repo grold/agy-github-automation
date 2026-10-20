@@ -1,4 +1,5 @@
 """Sample math utilities module."""
+from math import gcd
 
 def add(a: float, b: float) -> float:
     """Returns the sum of a and b."""
@@ -13,4 +14,12 @@ def divide(a: float, b: float) -> float:
     if b == 0:
         raise ValueError("Cannot divide by zero")
     return a / b
+
+def lcm(a: int, b: int) -> int:
+    """Returns the least common multiple of a and b."""
+    if a < 0 or b < 0:
+        raise ValueError("Inputs must be non-negative integers")
+    if a == 0 or b == 0:
+        return 0
+    return abs(a * b) // gcd(a, b)
 
