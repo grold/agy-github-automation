@@ -251,8 +251,11 @@ def refresh_token_if_needed(token_path):
 
 def main():
     token_file = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/.gemini/keyring_token.json")
-    if os.path.exists(token_file):
-        refresh_token_if_needed(token_file)
+    if not os.path.exists(token_file):
+        print(f"Error: Token file '{token_file}' does not exist.", file=sys.stderr, flush=True)
+        sys.exit(1)
+
+    refresh_token_if_needed(token_file)
 
     with open(token_file, "rb") as f:
         token_bytes = f.read().strip()

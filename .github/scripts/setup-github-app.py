@@ -6,6 +6,7 @@ exchanges the callback code for App ID and Private Key,
 and sets them directly into GitHub Actions Secrets.
 """
 
+import html
 import http.server
 import json
 import os
@@ -16,14 +17,29 @@ import urllib.request
 import webbrowser
 
 PORT = 3000
-REPO = sys.argv[1] if len(sys.argv) > 1 else "grold/agy-github-automation"
+
+def get_default_repo():
+    try:
+        res = subprocess.run(
+            ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+            capture_output=True, text=True, check=True
+        )
+        val = res.stdout.strip()
+        if val:
+            return val
+    except Exception:
+        pass
+    return "grold/agy-github-automation"
+
+REPO = sys.argv[1] if len(sys.argv) > 1 else get_default_repo()
 APP_NAME = sys.argv[2] if len(sys.argv) > 2 else f"agy-bot-{REPO.split('/')[0]}"
 
 MANIFEST = {
     "name": APP_NAME,
     "url": f"https://github.com/{REPO}",
     "hook_attributes": {
-        "url": "https://example.com"
+        "url": "https://example.com",
+        "active": False
     },
     "redirect_url": f"http://localhost:{PORT}/callback",
     "public": False,
@@ -31,6 +47,7 @@ MANIFEST = {
         "contents": "write",
         "issues": "write",
         "pull_requests": "write",
+        "workflows": "write",
         "metadata": "read"
     },
     "default_events": []
@@ -39,11 +56,12 @@ MANIFEST = {
 class ManifestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        escaped_manifest = html.escape(json.dumps(MANIFEST), quote=True)
         if parsed.path == "/":
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            html = f"""<!DOCTYPE html>
+            html_content = f"""<!DOCTYPE html>
 <html>
 <head>
     <title>Setup GitHub App for Antigravity</title>
@@ -60,15 +78,15 @@ class ManifestHandler(http.server.BaseHTTPRequestHandler):
 <body>
     <div class="card">
         <h1>Register Antigravity Bot</h1>
-        <p>This will register a dedicated GitHub App (<code>{APP_NAME}</code>) with automated permissions (Issues, Pull Requests, Contents) for <code>{REPO}</code>.</p>
+        <p>This will register a dedicated GitHub App (<code>{html.escape(APP_NAME)}</code>) with automated permissions (Issues, Pull Requests, Contents, Workflows) for <code>{html.escape(REPO)}</code>.</p>
         <form action="https://github.com/settings/apps/new" method="post">
-            <input type="hidden" name="manifest" value='{json.dumps(MANIFEST)}' />
+            <input type="hidden" name="manifest" value='{escaped_manifest}' />
             <button type="submit">Create GitHub App on GitHub &rarr;</button>
         </form>
     </div>
 </body>
 </html>"""
-            self.wfile.write(html.encode("utf-8"))
+            self.wfile.write(html_content.encode("utf-8"))
         elif parsed.path == "/callback":
             params = urllib.parse.parse_qs(parsed.query)
             code = params.get("code", [""])[0]
@@ -108,7 +126,7 @@ class ManifestHandler(http.server.BaseHTTPRequestHandler):
                 if "GH_TOKEN" not in env:
                     try:
                         token_res = subprocess.run(
-                            ["secret-tool", "lookup", "service", "gh:github.com", "username", "grold"],
+                            ["gh", "auth", "token"],
                             capture_output=True, text=True, check=True
                         )
                         env["GH_TOKEN"] = token_res.stdout.strip()

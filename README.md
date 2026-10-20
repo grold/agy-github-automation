@@ -191,5 +191,6 @@ Edit [`.github/docker/Dockerfile`](.github/docker/Dockerfile) to add any compile
 ## 🔒 Security & Guardrails
 
 - **Collaborator Filtering:** The solver workflow will only execute for issues created by repository collaborators, members, or owners (`OWNER`, `MEMBER`, `COLLABORATOR`). External or untrusted user issues will not consume your Antigravity quota unless explicitly labeled with `agent:solve` by a maintainer.
-- **Container Sandboxing:** All agent execution and file modifications occur inside ephemeral Docker containers without host privilege escalation.
-- **Credential Protection:** Authentication keys are injected via GitHub Actions secrets and are never committed to git.
+- **Isolated Execution & Token Segregation:** GitHub tokens (`GH_TOKEN` / `GITHUB_TOKEN`) are strictly withheld from the agent's Docker container. The agent executes in an isolated environment and only modifies repository files. Git commits, pushes, and GitHub API interactions are executed by trusted host runner steps after the agent finishes.
+- **Credential Protection:** `persist-credentials: false` ensures no tokens are ever saved to `.git/config`. Antigravity credentials (`AGY_AUTH_BASE64`) are decoded into `~/.gemini` and immediately scrubbed from process environment variables.
+- **Concurrency & Deduplication:** Concurrency controls ensure only one solver or reviewer run executes per issue or PR at any time, canceling redundant in-progress runs when new commits or duplicate events arrive.

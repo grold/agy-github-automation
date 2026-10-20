@@ -35,7 +35,12 @@ except Exception:
 ' 2>/dev/null || true)
 fi
 
+# Set restrictive permissions for credential handling
+umask 077
+
 TEMP_DIR=$(mktemp -d)
+TEMP_TAR=$(mktemp)
+trap 'rm -rf "$TEMP_DIR" "$TEMP_TAR"' EXIT
 mkdir -p "$TEMP_DIR/.gemini/antigravity-cli"
 
 if [ -n "$KEYRING_SECRET" ]; then
@@ -101,8 +106,8 @@ if client_id and client_secret:
                 json.dump(data, f)
             print('Refreshed token before packaging.')
     except Exception as e:
-        print(f'Token refresh check: {e}')
-" "$TEMP_DIR/.gemini/keyring_token.json" "$TEMP_DIR" 2>/dev/null || true
+        print(f'Token refresh check: {e}', file=sys.stderr)
+" "$TEMP_DIR/.gemini/keyring_token.json" "$TEMP_DIR" || true
   echo "Included Secret Service keyring token."
 fi
 
@@ -124,7 +129,6 @@ if [ -f "$TEMP_DIR/.gemini/keyring_token.json" ]; then
   echo "Synced antigravity-oauth-token from refreshed token."
 fi
 
-TEMP_TAR=$(mktemp)
 tar -czf "$TEMP_TAR" -C "$TEMP_DIR" .gemini
 rm -rf "$TEMP_DIR"
 

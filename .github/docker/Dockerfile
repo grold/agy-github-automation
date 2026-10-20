@@ -25,9 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dbus \
     python3-gi \
     python3-cryptography \
-    sudo \
     dbus \
-    dbus-x11 \
     libsecret-tools \
     python3-secretstorage \
     && rm -rf /var/lib/apt/lists/*

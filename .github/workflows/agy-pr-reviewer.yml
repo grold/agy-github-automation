@@ -8,10 +8,20 @@ on:
         required: false
         type: string
       runner_image:
-        description: "Runner container image to use"
+        description: "Runner container image to use (defaults to ghcr.io/<owner>/agy-runner:latest)"
         required: false
         type: string
-        default: "ghcr.io/grold/agy-runner:latest"
+        default: ""
+      model:
+        description: "AI model name to use"
+        required: false
+        type: string
+        default: "Gemini 3.8 Flash"
+      reasoning_effort:
+        description: "AI reasoning effort (low, medium, high, xhigh, max)"
+        required: false
+        type: string
+        default: "Medium"
     secrets:
       AGY_AUTH_BASE64:
         required: false
@@ -33,17 +43,36 @@ on:
         description: "Runner container image to use"
         required: false
         type: string
-        default: "ghcr.io/grold/agy-runner:latest"
+        default: ""
+      model:
+        description: "AI model name to use"
+        required: false
+        type: string
+        default: "Gemini 3.8 Flash"
+      reasoning_effort:
+        description: "AI reasoning effort (low, medium, high, xhigh, max)"
+        required: false
+        type: string
+        default: "Medium"
 
 permissions:
   contents: read
   pull-requests: write
-  issues: write
+
+concurrency:
+  group: agy-review-${{ github.repository }}-${{ inputs.pr_number || github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   review:
     name: Review PR with Antigravity
     runs-on: ubuntu-latest
+
+    # Only run on dispatch, reusable workflow calls, or non-draft same-repo PRs
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      inputs.pr_number != '' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
 
     steps:
       - name: Generate GitHub App Token
@@ -58,38 +87,88 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
           token: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Prepare Runner Container
+        id: prepare-container
+        env:
+          INPUT_IMAGE: ${{ inputs.runner_image }}
         run: |
-          IMAGE="${{ inputs.runner_image || 'ghcr.io/grold/agy-runner:latest' }}"
+          if [ -n "$INPUT_IMAGE" ]; then
+            IMAGE="$INPUT_IMAGE"
+          else
+            IMAGE="ghcr.io/${{ github.repository_owner }}/agy-runner:latest"
+          fi
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
           echo "PULLING_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
           if docker pull "$IMAGE"; then
             echo "Successfully pulled $IMAGE"
-          else
+          elif [ -f .github/docker/Dockerfile ]; then
             echo "Image $IMAGE not yet found in registry. Falling back to local build..."
             docker build -t "$IMAGE" -f .github/docker/Dockerfile .
+          else
+            echo "Error: Could not pull container image '$IMAGE' and no .github/docker/Dockerfile exists." >&2
+            exit 1
           fi
+
+      - name: Resolve Bot Identity
+        id: bot-id
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          SLUG="${{ steps.app-token.outputs.app-slug }}"
+          if [ -n "$SLUG" ]; then
+            BOT_NAME="${SLUG}[bot]"
+          else
+            BOT_NAME="antigravity-bot[bot]"
+          fi
+          echo "BOT_NAME=$BOT_NAME" >> "$GITHUB_ENV"
+
+      - name: Prepare PR Context and Diff
+        id: pr-context
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ inputs.pr_number || github.event.pull_request.number }}"
+          echo "PR_NUM=$PR_NUM" >> "$GITHUB_ENV"
+
+          mkdir -p /tmp/agy-context
+          gh pr view "$PR_NUM" --json title,body,headRefOid,baseRefName,author > /tmp/agy-context/pr_info.json
+          gh pr diff "$PR_NUM" > /tmp/agy-context/pr_diff.patch
 
       - name: Execute PR Reviewer Agent in Isolated Container
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          PR_NUMBER: ${{ env.PR_NUM }}
           AGY_AUTH_BASE64: ${{ secrets.AGY_AUTH_BASE64 }}
-          AI_MODEL_NAME: "Gemini 3.8 Flash"
-          AI_REASONING_EFFORT: "Medium"
+          AI_MODEL_NAME: ${{ inputs.model || 'Gemini 3.8 Flash' }}
+          AI_REASONING_EFFORT: ${{ inputs.reasoning_effort || 'Medium' }}
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/workspace" \
+            -v "/tmp/agy-context:/agy-context:ro" \
             -w /workspace \
-            -e GITHUB_TOKEN \
-            -e GH_TOKEN \
-            -e GITHUB_REPOSITORY \
             -e PR_NUMBER \
             -e AGY_AUTH_BASE64 \
             -e AI_MODEL_NAME \
             -e AI_REASONING_EFFORT \
+            -e PR_CONTEXT_DIR=/agy-context \
             "$PULLING_IMAGE" \
             bash -c "if [ -x /opt/agy-automation/scripts/run-reviewer.sh ]; then /opt/agy-automation/scripts/run-reviewer.sh; else /workspace/.github/scripts/run-reviewer.sh; fi"
+
+      - name: Post Review to GitHub
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          BOT_NAME: ${{ env.BOT_NAME }}
+          AI_MODEL_NAME: ${{ inputs.model || 'Gemini 3.8 Flash' }}
+          AI_REASONING_EFFORT: ${{ inputs.reasoning_effort || 'Medium' }}
+        run: |
+          if [ -f .github/scripts/post-review.py ]; then
+            python3 .github/scripts/post-review.py "/workspace/.agy-review.json" "$PR_NUM" "${{ github.repository }}" "/tmp/agy-context/pr_info.json"
+          else
+            python3 -c '
+          import sys, os, subprocess
+          subprocess.run(["python3", "/opt/agy-automation/scripts/post-review.py", "/workspace/.agy-review.json", os.environ["PR_NUM"], os.environ["GITHUB_REPOSITORY"], "/tmp/agy-context/pr_info.json"], check=True)
+          '
+          fi

@@ -13,10 +13,20 @@ on:
         type: string
         default: "main"
       runner_image:
-        description: "Runner container image to use"
+        description: "Runner container image to use (defaults to ghcr.io/<owner>/agy-runner:latest)"
         required: false
         type: string
-        default: "ghcr.io/grold/agy-runner:latest"
+        default: ""
+      model:
+        description: "AI model name to use"
+        required: false
+        type: string
+        default: "Gemini 3.8 Flash"
+      reasoning_effort:
+        description: "AI reasoning effort (low, medium, high, xhigh, max)"
+        required: false
+        type: string
+        default: "Medium"
     secrets:
       AGY_AUTH_BASE64:
         required: false
@@ -34,26 +44,45 @@ on:
         description: "Issue number to solve"
         required: true
         type: string
+      base_branch:
+        description: "Target base branch for PR"
+        required: false
+        type: string
+        default: "main"
       runner_image:
         description: "Runner container image to use"
         required: false
         type: string
-        default: "ghcr.io/grold/agy-runner:latest"
+        default: ""
+      model:
+        description: "AI model name to use"
+        required: false
+        type: string
+        default: "Gemini 3.8 Flash"
+      reasoning_effort:
+        description: "AI reasoning effort (low, medium, high, xhigh, max)"
+        required: false
+        type: string
+        default: "Medium"
 
 permissions:
   contents: write
   pull-requests: write
   issues: write
 
+concurrency:
+  group: agy-solve-${{ github.repository }}-${{ inputs.issue_number || github.event.issue.number }}
+  cancel-in-progress: true
+
 jobs:
   solve:
     name: Solve Issue with Antigravity
     runs-on: ubuntu-latest
 
-    # Only run when called via workflow_call, workflow_dispatch, opened by collaborators, or labeled agent:solve
+    # Only run when called via workflow_call with issue, workflow_dispatch, opened by collaborators, or labeled agent:solve
     if: >
-      github.event_name == 'workflow_call' ||
       github.event_name == 'workflow_dispatch' ||
+      inputs.issue_number != '' ||
       (github.event.action == 'opened' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
       (github.event.action == 'labeled' && github.event.label.name == 'agent:solve')
 
@@ -70,63 +99,140 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
           token: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Prepare Runner Container
+        id: prepare-container
+        env:
+          INPUT_IMAGE: ${{ inputs.runner_image }}
         run: |
-          IMAGE="${{ inputs.runner_image || 'ghcr.io/grold/agy-runner:latest' }}"
+          if [ -n "$INPUT_IMAGE" ]; then
+            IMAGE="$INPUT_IMAGE"
+          else
+            IMAGE="ghcr.io/${{ github.repository_owner }}/agy-runner:latest"
+          fi
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
           echo "PULLING_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
           if docker pull "$IMAGE"; then
             echo "Successfully pulled $IMAGE"
-          else
+          elif [ -f .github/docker/Dockerfile ]; then
             echo "Image $IMAGE not yet found in registry. Falling back to local build..."
             docker build -t "$IMAGE" -f .github/docker/Dockerfile .
+          else
+            echo "Error: Could not pull container image '$IMAGE' and no .github/docker/Dockerfile exists." >&2
+            exit 1
           fi
 
       - name: Configure Git identity
+        id: git-identity
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           SLUG="${{ steps.app-token.outputs.app-slug }}"
           if [ -n "$SLUG" ]; then
             BOT_NAME="${SLUG}[bot]"
-            BOT_EMAIL="${SLUG}[bot]@users.noreply.github.com"
+            BOT_ID=$(gh api "/users/${SLUG}%5Bbot%5D" --jq '.id' 2>/dev/null || true)
+            if [ -n "$BOT_ID" ]; then
+              BOT_EMAIL="${BOT_ID}+${SLUG}[bot]@users.noreply.github.com"
+            else
+              BOT_EMAIL="${SLUG}[bot]@users.noreply.github.com"
+            fi
           else
             BOT_NAME="antigravity-bot[bot]"
             BOT_EMAIL="antigravity-bot[bot]@users.noreply.github.com"
           fi
-          git config --global user.name "$BOT_NAME"
-          git config --global user.email "$BOT_EMAIL"
           echo "BOT_NAME=$BOT_NAME" >> "$GITHUB_ENV"
           echo "BOT_EMAIL=$BOT_EMAIL" >> "$GITHUB_ENV"
 
+      - name: Prepare Issue Context
+        id: issue-context
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM="${{ inputs.issue_number || github.event.issue.number }}"
+          echo "ISSUE_NUM=$ISSUE_NUM" >> "$GITHUB_ENV"
+
+          mkdir -p /tmp/agy-context
+          ISSUE_JSON=$(gh issue view "$ISSUE_NUM" --json title,body,comments 2>/dev/null || true)
+          if [ -n "$ISSUE_JSON" ]; then
+            TITLE=$(echo "$ISSUE_JSON" | jq -r '.title // ""')
+            BODY=$(echo "$ISSUE_JSON" | jq -r '.body // ""')
+          else
+            TITLE="${{ github.event.issue.title || 'Manual Trigger' }}"
+            BODY="${{ github.event.issue.body || '' }}"
+          fi
+
+          echo "ISSUE_TITLE=$TITLE" >> "$GITHUB_ENV"
+          printf "Issue #%s: %s\n\n%s\n" "$ISSUE_NUM" "$TITLE" "$BODY" > /tmp/agy-context/issue_context.md
+
       - name: Execute Issue Solver Agent in Isolated Container
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          BOT_NAME: ${{ env.BOT_NAME }}
-          BOT_EMAIL: ${{ env.BOT_EMAIL }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title || 'Manual Trigger' }}
-          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_NUMBER: ${{ env.ISSUE_NUM }}
           AGY_AUTH_BASE64: ${{ secrets.AGY_AUTH_BASE64 }}
           BASE_BRANCH: ${{ inputs.base_branch || github.event.repository.default_branch || 'main' }}
-          AI_MODEL_NAME: "Gemini 3.8 Flash"
-          AI_REASONING_EFFORT: "Medium"
+          AI_MODEL_NAME: ${{ inputs.model || 'Gemini 3.8 Flash' }}
+          AI_REASONING_EFFORT: ${{ inputs.reasoning_effort || 'Medium' }}
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/workspace" \
+            -v "/tmp/agy-context:/agy-context:ro" \
             -w /workspace \
-            -e GITHUB_TOKEN \
-            -e GH_TOKEN \
-            -e BOT_NAME \
-            -e BOT_EMAIL \
-            -e GITHUB_REPOSITORY \
             -e ISSUE_NUMBER \
-            -e ISSUE_TITLE \
-            -e ISSUE_BODY \
             -e AGY_AUTH_BASE64 \
             -e BASE_BRANCH \
             -e AI_MODEL_NAME \
             -e AI_REASONING_EFFORT \
+            -e ISSUE_CONTEXT_FILE=/agy-context/issue_context.md \
             "$PULLING_IMAGE" \
             bash -c "if [ -x /opt/agy-automation/scripts/run-solver.sh ]; then /opt/agy-automation/scripts/run-solver.sh; else /workspace/.github/scripts/run-solver.sh; fi"
+
+      - name: Commit and Push Changes
+        id: commit-push
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: "agent/issue-${{ env.ISSUE_NUM }}"
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changes made by agent."
+            gh issue comment "$ISSUE_NUM" --body "🤖 **Antigravity Issue Solver** examined this issue but did not make any code changes. Please review the issue details or run manual investigation."
+            exit 0
+          fi
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          git config user.name "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
+          git checkout -B "$BRANCH_NAME" "origin/${{ inputs.base_branch || github.event.repository.default_branch || 'main' }}" 2>/dev/null || git checkout -B "$BRANCH_NAME"
+          git add -A
+          git commit -m "$(printf 'fix(issue-%s): %s\n\nAutomated fix generated by Antigravity Agent.\nFixes #%s' "$ISSUE_NUM" "$ISSUE_TITLE" "$ISSUE_NUM")"
+          git push -u "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH_NAME" --force-with-lease
+
+      - name: Create or Update Pull Request
+        if: steps.commit-push.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: "agent/issue-${{ env.ISSUE_NUM }}"
+          BASE_BRANCH: ${{ inputs.base_branch || github.event.repository.default_branch || 'main' }}
+          AI_MODEL_NAME: ${{ inputs.model || 'Gemini 3.8 Flash' }}
+          AI_REASONING_EFFORT: ${{ inputs.reasoning_effort || 'Medium' }}
+        run: |
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number' 2>/dev/null || true)
+          PR_BODY=$(printf 'Closes #%s\n\n### Automated Solution\nThis pull request was automatically generated by the Antigravity Issue Solver Agent.\n\n- **Issue:** #%s - %s\n- **Branch:** `%s`\n\nPlease review the code changes and test results.\n\n---\n*Assisted by %s (Reasoning: %s)*' \
+            "$ISSUE_NUM" "$ISSUE_NUM" "$ISSUE_TITLE" "$BRANCH_NAME" "$AI_MODEL_NAME" "$AI_REASONING_EFFORT")
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Pull request already exists: #${EXISTING_PR}. Updating..."
+            gh pr edit "$EXISTING_PR" --body "$PR_BODY"
+            PR_NUMBER="$EXISTING_PR"
+          else
+            PR_URL=$(gh pr create --base "$BASE_BRANCH" --head "$BRANCH_NAME" \
+              --title "fix: ${ISSUE_TITLE} (#${ISSUE_NUM})" \
+              --body "$PR_BODY")
+            echo "Created PR: $PR_URL"
+            PR_NUMBER=$(gh pr view "$BRANCH_NAME" --json number --jq '.number')
+          fi
+
+          COMMENT_BODY=$(printf '🤖 **Antigravity Issue Solver** has prepared a pull request for this issue: #%s\n\n---\n*Assisted by %s (Reasoning: %s)*' \
+            "$PR_NUMBER" "$AI_MODEL_NAME" "$AI_REASONING_EFFORT")
+          gh issue comment "$ISSUE_NUM" --body "$COMMENT_BODY"
