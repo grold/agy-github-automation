@@ -167,11 +167,9 @@ jobs:
           AI_MODEL_NAME: ${{ inputs.model || 'Gemini 3.8 Flash' }}
           AI_REASONING_EFFORT: ${{ inputs.reasoning_effort || 'Medium' }}
         run: |
-          if [ -f .github/scripts/post-review.py ]; then
-            python3 .github/scripts/post-review.py "/workspace/.agy-review.json" "$PR_NUM" "${{ github.repository }}" "/tmp/agy-context/pr_info.json"
-          else
-            python3 -c '
-          import sys, os, subprocess
-          subprocess.run(["python3", "/opt/agy-automation/scripts/post-review.py", "/workspace/.agy-review.json", os.environ["PR_NUM"], os.environ["GITHUB_REPOSITORY"], "/tmp/agy-context/pr_info.json"], check=True)
-          '
+          REVIEW_SCRIPT=".github/scripts/post-review.py"
+          if [ ! -f "$REVIEW_SCRIPT" ]; then
+            docker run --rm "$PULLING_IMAGE" cat /opt/agy-automation/scripts/post-review.py > /tmp/agy-context/post-review.py
+            REVIEW_SCRIPT="/tmp/agy-context/post-review.py"
           fi
+          python3 "$REVIEW_SCRIPT" "$GITHUB_WORKSPACE/.agy-review.json" "$PR_NUM" "${{ github.repository }}" "/tmp/agy-context/pr_info.json"

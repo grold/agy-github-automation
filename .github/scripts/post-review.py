@@ -30,8 +30,14 @@ def main():
     pr_info_path = sys.argv[4] if len(sys.argv) > 4 else None
 
     if not os.path.exists(review_path):
-        print(f"Error: Review JSON not found at {review_path}", file=sys.stderr)
-        sys.exit(1)
+        basename = os.path.basename(review_path)
+        if os.path.exists(basename):
+            review_path = basename
+        elif os.environ.get("GITHUB_WORKSPACE") and os.path.exists(os.path.join(os.environ["GITHUB_WORKSPACE"], basename)):
+            review_path = os.path.join(os.environ["GITHUB_WORKSPACE"], basename)
+        else:
+            print(f"Error: Review JSON not found at {review_path}", file=sys.stderr)
+            sys.exit(1)
 
     with open(review_path, "r", encoding="utf-8") as f:
         review_data = json.load(f)
