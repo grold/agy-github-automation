@@ -186,7 +186,7 @@ jobs:
             -e AI_REASONING_EFFORT \
             -e ISSUE_CONTEXT_FILE=/agy-context/issue_context.md \
             "$PULLING_IMAGE" \
-            bash -c "if [ -x /opt/agy-automation/scripts/run-solver.sh ]; then /opt/agy-automation/scripts/run-solver.sh; else /workspace/.github/scripts/run-solver.sh; fi"
+            bash -c "if [ -x /workspace/.github/scripts/run-solver.sh ]; then /workspace/.github/scripts/run-solver.sh; elif [ -x /opt/agy-automation/scripts/run-solver.sh ]; then /opt/agy-automation/scripts/run-solver.sh; fi"
 
       - name: Commit and Push Changes
         id: commit-push

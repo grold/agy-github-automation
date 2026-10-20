@@ -155,7 +155,7 @@ jobs:
             -e AI_REASONING_EFFORT \
             -e PR_CONTEXT_DIR=/agy-context \
             "$PULLING_IMAGE" \
-            bash -c "if [ -x /opt/agy-automation/scripts/run-reviewer.sh ]; then /opt/agy-automation/scripts/run-reviewer.sh; else /workspace/.github/scripts/run-reviewer.sh; fi"
+            bash -c "if [ -x /workspace/.github/scripts/run-reviewer.sh ]; then /workspace/.github/scripts/run-reviewer.sh; elif [ -x /opt/agy-automation/scripts/run-reviewer.sh ]; then /opt/agy-automation/scripts/run-reviewer.sh; fi"
 
       - name: Post Review to GitHub
         env:
